@@ -66,16 +66,66 @@ async def get_current_user(
             detail="Erro na autenticação"
         )
 
-# Contexto de criptografia para senhas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Contexto de criptografia usando bcrypt diretamente
+try:
+    import bcrypt
+    USE_BCRYPT_DIRECT = True
+except ImportError:
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    USE_BCRYPT_DIRECT = False
+
+def _truncate_password(password: str) -> str:
+    """Trunca senha para 72 bytes para compatibilidade com bcrypt"""
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) <= 72:
+        return password
+    # Truncar para 72 bytes, garantindo que não quebre caracteres UTF-8
+    return password_bytes[:72].decode('utf-8', errors='ignore')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifica se a senha está correta"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # Garantir que a senha não exceda 72 bytes
+        safe_password = _truncate_password(plain_password)
+        
+        if USE_BCRYPT_DIRECT:
+            # Usar bcrypt diretamente para evitar problemas de inicialização
+            safe_password_bytes = safe_password.encode('utf-8')
+            hashed_password_bytes = hashed_password.encode('utf-8')
+            return bcrypt.checkpw(safe_password_bytes, hashed_password_bytes)
+        else:
+            return pwd_context.verify(safe_password, hashed_password)
+            
+    except ValueError as e:
+        if "password cannot be longer than 72 bytes" in str(e):
+            # Se ainda houver problemas, forçar truncamento mais agressivo
+            truncated = plain_password[:50]  # Truncar por caracteres em vez de bytes
+            if USE_BCRYPT_DIRECT:
+                truncated_bytes = truncated.encode('utf-8')
+                hashed_password_bytes = hashed_password.encode('utf-8')
+                return bcrypt.checkpw(truncated_bytes, hashed_password_bytes)
+            else:
+                return pwd_context.verify(truncated, hashed_password)
+        # Para outros erros de bcrypt (como hashes inválidos), retornar False
+        return False
+    except Exception:
+        # Para qualquer outro erro, assumir que a senha está incorreta
+        return False
 
 def get_password_hash(password: str) -> str:
     """Gera hash da senha"""
-    return pwd_context.hash(password)
+    # Garantir que a senha não exceda 72 bytes
+    safe_password = _truncate_password(password)
+    
+    if USE_BCRYPT_DIRECT:
+        # Usar bcrypt diretamente
+        safe_password_bytes = safe_password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(safe_password_bytes, salt)
+        return hashed.decode('utf-8')
+    else:
+        return pwd_context.hash(safe_password)
 
 def hash_password(password: str) -> str:
     """Alias para get_password_hash"""
@@ -114,7 +164,7 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[Usuari
         return None
     
     # Atualizar último login
-    user.last_login = datetime.utcnow()
+    user.ultimo_login = datetime.utcnow()
     db.commit()
     
     return user

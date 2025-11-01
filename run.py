@@ -110,7 +110,7 @@ def create_env_file():
 DATABASE_URL=mysql://root:123456@localhost:3306/goalmanager
 JWT_SECRET_KEY=sua_chave_secreta_super_segura_aqui_123
 JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=4320
 API_HOST=0.0.0.0
 API_PORT=8000
 DEBUG=true

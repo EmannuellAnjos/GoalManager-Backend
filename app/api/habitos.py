@@ -15,6 +15,7 @@ from app.schemas import (
 )
 from app.services.auth import get_current_user
 from app.services.progress import recalcular_progresso_habito, marcar_habito_feito, resetar_ciclo_habito
+from app.utils.serialization import serialize_model, serialize_models
 
 router = APIRouter(prefix="/habitos", tags=["habitos"])
 
@@ -80,7 +81,7 @@ async def listar_habitos(
         has_prev=page > 1
     )
     
-    habitos_data = [h.__dict__ for h in habitos]
+    habitos_data = serialize_models(habitos)
     return DataResponse(data=habitos_data, pagination=pagination)
 
 @router.get("/{habito_id}", response_model=DataResponse)
@@ -104,7 +105,7 @@ async def obter_habito(
             detail="Hábito não encontrado"
         )
     
-    return DataResponse(data=habito.__dict__)
+    return DataResponse(data=serialize_model(habito))
 
 @router.post("", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def criar_habito(
@@ -124,7 +125,7 @@ async def criar_habito(
     db.commit()
     db.refresh(novo_habito)
     
-    return DataResponse(data=novo_habito.__dict__)
+    return DataResponse(data=serialize_model(novo_habito))
 
 @router.put("/{habito_id}", response_model=DataResponse)
 async def atualizar_habito(
@@ -159,7 +160,7 @@ async def atualizar_habito(
     # Recalcular progresso se necessário
     recalcular_progresso_habito(db, habito_id)
     
-    return DataResponse(data=habito.__dict__)
+    return DataResponse(data=serialize_model(habito))
 
 @router.delete("/{habito_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deletar_habito(
@@ -306,5 +307,5 @@ async def listar_habitos_por_objetivo(
         has_prev=page > 1
     )
     
-    habitos_data = [h.__dict__ for h in habitos]
+    habitos_data = serialize_models(habitos)
     return DataResponse(data=habitos_data, pagination=pagination)

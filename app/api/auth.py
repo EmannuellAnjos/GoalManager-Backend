@@ -47,7 +47,7 @@ async def registrar_usuario(
         nome=user_data.nome,
         email=user_data.email,
         senha_hash=hashed_password,
-        is_active=True
+        ativo=True
     )
     
     db.add(novo_usuario)
@@ -64,7 +64,7 @@ async def registrar_usuario(
             "id": novo_usuario.id,
             "nome": novo_usuario.nome,
             "email": novo_usuario.email,
-            "is_active": novo_usuario.is_active,
+            "is_active": novo_usuario.ativo,
             "created_at": novo_usuario.created_at
         }
     })
@@ -94,8 +94,8 @@ async def login_usuario(
             "id": user.id,
             "nome": user.nome,
             "email": user.email,
-            "is_active": user.is_active,
-            "last_login": user.last_login
+            "is_active": user.ativo,
+            "last_login": user.ultimo_login
         }
     })
 
@@ -143,9 +143,9 @@ async def obter_perfil(
         "id": usuario.id,
         "nome": usuario.nome,
         "email": usuario.email,
-        "is_active": usuario.is_active,
+        "is_active": usuario.ativo,
         "created_at": usuario.created_at,
-        "last_login": usuario.last_login
+        "last_login": usuario.ultimo_login
     })
 
 @user_router.put("/profile", response_model=DataResponse)
@@ -178,7 +178,7 @@ async def atualizar_perfil(
         "id": usuario.id,
         "nome": usuario.nome,
         "email": usuario.email,
-        "is_active": usuario.is_active,
+        "is_active": usuario.ativo,
         "updated_at": usuario.updated_at
     })
 

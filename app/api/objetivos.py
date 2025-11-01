@@ -14,6 +14,7 @@ from app.schemas import (
 )
 from app.services.auth import get_current_user
 from app.services.progress import recalcular_progresso_objetivo
+from app.utils.serialization import serialize_model, serialize_models
 from decimal import Decimal
 
 router = APIRouter(prefix="/objetivos", tags=["objetivos"])
@@ -45,7 +46,7 @@ async def listar_objetivos(
             COALESCE(AVG(CASE WHEN t.status = 'concluida' THEN 100 ELSE t.progresso END), 0) as progresso_medio_tarefas
         FROM objetivos o
         LEFT JOIN habitos h ON o.id = h.objetivo_id AND h.usuario_id = o.usuario_id
-        LEFT JOIN tarefas t ON o.id = t.objetivo_id AND t.usuario_id = o.usuario_id
+        LEFT JOIN tarefas t ON h.id = t.habito_id AND t.usuario_id = o.usuario_id
         WHERE o.usuario_id = :user_id
     """), {"user_id": current_user["sub"]})
     
@@ -97,7 +98,7 @@ async def listar_objetivos(
             COALESCE(AVG(CASE WHEN t.status = 'concluida' THEN 100 ELSE t.progresso END), 0) as progresso_medio_tarefas
         FROM objetivos o
         LEFT JOIN habitos h ON o.id = h.objetivo_id AND h.usuario_id = o.usuario_id
-        LEFT JOIN tarefas t ON o.id = t.objetivo_id AND t.usuario_id = o.usuario_id
+        LEFT JOIN tarefas t ON h.id = t.habito_id AND t.usuario_id = o.usuario_id
         WHERE {where_clause}
         {group_by}
         {order_clause}
@@ -166,7 +167,7 @@ async def obter_objetivo(
             detail="Objetivo não encontrado"
         )
     
-    return DataResponse(data=objetivo.__dict__)
+    return DataResponse(data=serialize_model(objetivo))
 
 @router.post("", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def criar_objetivo(
@@ -186,7 +187,7 @@ async def criar_objetivo(
     db.commit()
     db.refresh(novo_objetivo)
     
-    return DataResponse(data=novo_objetivo.__dict__)
+    return DataResponse(data=serialize_model(novo_objetivo))
 
 @router.put("/{objetivo_id}", response_model=DataResponse)
 async def atualizar_objetivo(
@@ -221,7 +222,7 @@ async def atualizar_objetivo(
     # Recalcular progresso se necessário
     recalcular_progresso_objetivo(db, objetivo_id)
     
-    return DataResponse(data=objetivo.__dict__)
+    return DataResponse(data=serialize_model(objetivo))
 
 @router.delete("/{objetivo_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deletar_objetivo(
@@ -293,3 +294,119 @@ async def deletar_objetivos_lote(
         "message": f"{deleted_count} objetivos removidos com sucesso",
         "deleted_count": deleted_count
     })
+
+@router.get("/{objetivo_id}/habitos", response_model=DataResponse)
+async def listar_habitos_do_objetivo(
+    objetivo_id: str,
+    page: int = Query(1, ge=1, description="Página"),
+    limit: int = Query(50, ge=1, le=100, description="Itens por página"),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Lista hábitos de um objetivo específico"""
+    
+    # Verificar se o objetivo existe e pertence ao usuário
+    objetivo = db.query(Objetivo).filter(
+        and_(
+            Objetivo.id == objetivo_id,
+            Objetivo.usuario_id == current_user["sub"]
+        )
+    ).first()
+    
+    if not objetivo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objetivo não encontrado"
+        )
+    
+    # Query para buscar hábitos do objetivo
+    query = db.query(Habito).filter(
+        and_(
+            Habito.objetivo_id == objetivo_id,
+            Habito.usuario_id == current_user["sub"]
+        )
+    )
+    
+    # Total de registros
+    total = query.count()
+    
+    # Paginação
+    offset = (page - 1) * limit
+    habitos = query.order_by(desc(Habito.created_at)).offset(offset).limit(limit).all()
+    
+    # Cálculo da paginação
+    total_pages = (total + limit - 1) // limit
+    
+    pagination = PaginationResponse(
+        page=page,
+        limit=limit,
+        total=total,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1
+    )
+    
+    habitos_data = serialize_models(habitos)
+    return DataResponse(data=habitos_data, pagination=pagination)
+
+@router.get("/{objetivo_id}/tarefas", response_model=DataResponse)
+async def listar_tarefas_do_objetivo(
+    objetivo_id: str,
+    page: int = Query(1, ge=1, description="Página"),
+    limit: int = Query(50, ge=1, le=100, description="Itens por página"),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Lista tarefas de um objetivo específico através dos hábitos do objetivo"""
+    
+    # Verificar se o objetivo existe e pertence ao usuário
+    objetivo = db.query(Objetivo).filter(
+        and_(
+            Objetivo.id == objetivo_id,
+            Objetivo.usuario_id == current_user["sub"]
+        )
+    ).first()
+    
+    if not objetivo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objetivo não encontrado"
+        )
+    
+    # Buscar IDs dos hábitos do objetivo
+    habitos_ids = db.query(Habito.id).filter(
+        and_(
+            Habito.objetivo_id == objetivo_id,
+            Habito.usuario_id == current_user["sub"]
+        )
+    ).subquery()
+    
+    # Query para buscar tarefas através dos hábitos do objetivo
+    query = db.query(Tarefa).filter(
+        and_(
+            Tarefa.habito_id.in_(habitos_ids),
+            Tarefa.usuario_id == current_user["sub"]
+        )
+    )
+    
+    # Total de registros
+    total = query.count()
+    
+    # Paginação
+    offset = (page - 1) * limit
+    tarefas = query.order_by(desc(Tarefa.created_at)).offset(offset).limit(limit).all()
+    
+    # Cálculo da paginação
+    total_pages = (total + limit - 1) // limit
+    
+    pagination = PaginationResponse(
+        page=page,
+        limit=limit,
+        total=total,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1
+    )
+    
+    tarefas_data = serialize_models(tarefas)
+    return DataResponse(data=tarefas_data, pagination=pagination)

@@ -8,12 +8,12 @@ from datetime import datetime
 # Schemas para autenticação
 class UserLogin(BaseModel):
     email: EmailStr = Field(..., description="Email do usuário")
-    password: str = Field(..., min_length=6, description="Senha do usuário")
+    password: str = Field(..., min_length=6, max_length=200, description="Senha do usuário")
 
 class UserRegister(BaseModel):
     nome: str = Field(..., min_length=1, max_length=100, description="Nome completo")
     email: EmailStr = Field(..., description="Email do usuário")
-    password: str = Field(..., min_length=6, description="Senha do usuário")
+    password: str = Field(..., min_length=6, max_length=200, description="Senha do usuário")
 
 class TokenResponse(BaseModel):
     access_token: str

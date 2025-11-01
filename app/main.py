@@ -10,10 +10,22 @@ from app.core.config import settings
 from app.core.database import init_db, test_connection
 from app.api import objetivos
 from app.api import habitos, tarefas, auth
+from app.middleware import RequestLoggingMiddleware
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
+# Configurar logging com formato personalizado
+logging.basicConfig(
+    level=logging.INFO,  # Nível normal para produção
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
+
+# Configurar logger específico para requisições
+request_logger = logging.getLogger('app.middleware.logging')
+request_logger.setLevel(logging.INFO)
+
+# Para habilitar debug detalhado, descomente as linhas abaixo:
+# logging.getLogger('app.middleware.logging').setLevel(logging.DEBUG)
 
 # Função de inicialização
 @asynccontextmanager
@@ -48,6 +60,10 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan
 )
+
+# Configurar middlewares
+# Middleware de logging (deve ser adicionado antes do CORS)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Configurar CORS
 app.add_middleware(

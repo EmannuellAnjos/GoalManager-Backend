@@ -15,6 +15,7 @@ from app.schemas import (
 )
 from app.services.auth import get_current_user
 from app.services.progress import recalcular_progresso_habito
+from app.utils.serialization import serialize_model, serialize_models
 
 router = APIRouter(prefix="/tarefas", tags=["tarefas"])
 
@@ -88,7 +89,7 @@ async def listar_tarefas(
         has_prev=page > 1
     )
     
-    tarefas_data = [t.__dict__ for t in tarefas]
+    tarefas_data = serialize_models(tarefas)
     return DataResponse(data=tarefas_data, pagination=pagination)
 
 @router.get("/{tarefa_id}", response_model=DataResponse)
@@ -112,7 +113,7 @@ async def obter_tarefa(
             detail="Tarefa não encontrada"
         )
     
-    return DataResponse(data=tarefa.__dict__)
+    return DataResponse(data=serialize_model(tarefa))
 
 @router.post("", response_model=DataResponse, status_code=status.HTTP_201_CREATED)
 async def criar_tarefa(
@@ -132,7 +133,7 @@ async def criar_tarefa(
     db.commit()
     db.refresh(nova_tarefa)
     
-    return DataResponse(data=nova_tarefa.__dict__)
+    return DataResponse(data=serialize_model(nova_tarefa))
 
 @router.put("/{tarefa_id}", response_model=DataResponse)
 async def atualizar_tarefa(
@@ -177,7 +178,7 @@ async def atualizar_tarefa(
     if tarefa.habito_id:
         recalcular_progresso_habito(db, tarefa.habito_id)
     
-    return DataResponse(data=tarefa.__dict__)
+    return DataResponse(data=serialize_model(tarefa))
 
 @router.delete("/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def deletar_tarefa(
@@ -249,7 +250,7 @@ async def atualizar_status_tarefa(
     if tarefa.habito_id:
         recalcular_progresso_habito(db, tarefa.habito_id)
     
-    return DataResponse(data=tarefa.__dict__)
+    return DataResponse(data=serialize_model(tarefa))
 
 # Rota para listar tarefas por hábito
 @router.get("/habito/{habito_id}", response_model=DataResponse)
@@ -284,7 +285,7 @@ async def listar_tarefas_por_habito(
         has_prev=page > 1
     )
     
-    tarefas_data = [t.__dict__ for t in tarefas]
+    tarefas_data = serialize_models(tarefas)
     return DataResponse(data=tarefas_data, pagination=pagination)
 
 # Rota para kanban - listar tarefas agrupadas por status
@@ -313,6 +314,6 @@ async def listar_tarefas_kanban(
     for tarefa in tarefas:
         status = tarefa.status_kanban or "backlog"
         if status in kanban_data:
-            kanban_data[status].append(tarefa.__dict__)
+            kanban_data[status].append(serialize_model(tarefa))
     
     return DataResponse(data=kanban_data)
