@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     
     # Configurações de desenvolvimento
     disable_auth: bool = False  # Para desabilitar autenticação em desenvolvimento
+    debug: bool = False  # Já existe acima, mas garantir que está definido
     
     class Config:
         env_file = ".env"

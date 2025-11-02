@@ -8,14 +8,14 @@ from sqlalchemy import and_, or_, desc, asc, func, text
 from typing import List, Optional
 from datetime import date, datetime
 from app.core.database import get_db
-from app.models import Habito, HabitoRealizacao
+from app.models import Habito, HabitoRealizacao, Tarefa
 from app.schemas import (
     HabitoCreate, HabitoUpdate, HabitoResponse, MarcarHabitoFeito,
     HabitoFilters, PaginationParams, PaginationResponse, DataResponse
 )
 from app.services.auth import get_current_user
 from app.services.progress import recalcular_progresso_habito, marcar_habito_feito, resetar_ciclo_habito
-from app.utils.serialization import serialize_model, serialize_models
+from app.utils.serialization import serialize_model, serialize_models, serialize_tarefas
 
 router = APIRouter(prefix="/habitos", tags=["habitos"])
 
@@ -84,6 +84,60 @@ async def listar_habitos(
     habitos_data = serialize_models(habitos)
     return DataResponse(data=habitos_data, pagination=pagination)
 
+# Rota para listar tarefas de um hábito (deve vir antes de /{habito_id} para evitar conflito)
+@router.get("/{habito_id}/tarefas", response_model=DataResponse)
+async def listar_tarefas_do_habito(
+    habito_id: str,
+    page: int = Query(1, ge=1, description="Página"),
+    limit: int = Query(50, ge=1, le=100, description="Itens por página"),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Lista tarefas de um hábito específico"""
+    
+    # Verificar se o hábito existe e pertence ao usuário
+    habito = db.query(Habito).filter(
+        and_(
+            Habito.id == habito_id,
+            Habito.usuario_id == current_user["sub"]
+        )
+    ).first()
+    
+    if not habito:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hábito não encontrado"
+        )
+    
+    # Buscar tarefas do hábito
+    query = db.query(Tarefa).filter(
+        and_(
+            Tarefa.habito_id == habito_id,
+            Tarefa.usuario_id == current_user["sub"]
+        )
+    )
+    
+    total = query.count()
+    offset = (page - 1) * limit
+    tarefas = query.order_by(desc(Tarefa.created_at)).offset(offset).limit(limit).all()
+    
+    total_pages = (total + limit - 1) // limit
+    
+    pagination = PaginationResponse(
+        page=page,
+        limit=limit,
+        total=total,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1
+    )
+    
+    # Serializar tarefas usando o schema Pydantic para garantir camelCase
+    # e incluir todos os campos (estimativa_horas, horas_gastas, etc)
+    tarefas_data = serialize_tarefas(tarefas)
+    
+    return DataResponse(data=tarefas_data, pagination=pagination)
+
 @router.get("/{habito_id}", response_model=DataResponse)
 async def obter_habito(
     habito_id: str,
@@ -115,17 +169,26 @@ async def criar_habito(
 ):
     """Cria um novo hábito"""
     
-    # Criar novo hábito
-    novo_habito = Habito(
-        usuario_id=current_user["sub"],
-        **habito_data.model_dump()
-    )
-    
-    db.add(novo_habito)
-    db.commit()
-    db.refresh(novo_habito)
-    
-    return DataResponse(data=serialize_model(novo_habito))
+    try:
+        # Criar novo hábito
+        novo_habito = Habito(
+            usuario_id=current_user["sub"],
+            **habito_data.model_dump()
+        )
+        
+        db.add(novo_habito)
+        db.commit()
+        db.refresh(novo_habito)
+        
+        return DataResponse(data=serialize_model(novo_habito))
+    except Exception as e:
+        db.rollback()
+        print(f"❌ ERRO AO CRIAR HÁBITO: {str(e)}")
+        print(f"📋 Dados recebidos: {habito_data.model_dump()}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Erro ao criar hábito: {str(e)}"
+        )
 
 @router.put("/{habito_id}", response_model=DataResponse)
 async def atualizar_habito(

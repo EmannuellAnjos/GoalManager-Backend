@@ -7,6 +7,11 @@ from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
 
+def to_camel(string: str) -> str:
+    """Converte snake_case para camelCase"""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
 class StatusTarefa(str, Enum):
     BACKLOG = "backlog"
     A_FAZER = "a_fazer"
@@ -21,8 +26,13 @@ class PrioridadeTarefa(str, Enum):
 
 # Schemas para criação
 class TarefaCreate(BaseModel):
-    objetivo_id: Optional[str] = Field(None, description="ID do objetivo (opcional)")
-    habito_id: Optional[str] = Field(None, description="ID do hábito (opcional)")
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        extra='ignore'
+    )
+    
+    habito_id: str = Field(..., description="ID do hábito")
     titulo: str = Field(..., min_length=1, max_length=255, description="Título da tarefa")
     descricao: Optional[str] = Field(None, description="Descrição detalhada da tarefa")
     prioridade: Optional[PrioridadeTarefa] = Field(None, description="Prioridade da tarefa")
@@ -34,6 +44,12 @@ class TarefaCreate(BaseModel):
 
 # Schemas para atualização
 class TarefaUpdate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        extra='ignore'
+    )
+    
     titulo: Optional[str] = Field(None, min_length=1, max_length=255)
     descricao: Optional[str] = None
     prioridade: Optional[PrioridadeTarefa] = None
@@ -48,12 +64,15 @@ class TarefaUpdate(BaseModel):
 
 # Schema de resposta
 class TarefaResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel
+    )
     
     id: str
     usuario_id: str
-    objetivo_id: Optional[str]
-    habito_id: Optional[str]
+    habito_id: str
     titulo: str
     descricao: Optional[str]
     prioridade: Optional[PrioridadeTarefa]
@@ -70,15 +89,12 @@ class TarefaResponse(BaseModel):
 
 # Schema para listagem com informações relacionadas (usando view)
 class TarefaCompleta(TarefaResponse):
-    objetivo_titulo: Optional[str] = None
-    objetivo_cor: Optional[str] = None
     habito_titulo: Optional[str] = None
     habito_frequencia: Optional[str] = None
     em_atraso: bool = False
 
 # Schema para filtros
 class TarefaFilters(BaseModel):
-    objetivo_id: Optional[str] = Field(None, description="Filtro por objetivo")
     habito_id: Optional[str] = Field(None, description="Filtro por hábito")
     busca: Optional[str] = Field(None, description="Busca em título e descrição")
     status: Optional[List[StatusTarefa]] = Field(None, description="Filtro por status")

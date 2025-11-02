@@ -7,6 +7,11 @@ from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
 
+def to_camel(string: str) -> str:
+    """Converte snake_case para camelCase"""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
 class StatusHabito(str, Enum):
     ATIVO = "ativo"
     PAUSADO = "pausado"
@@ -19,6 +24,12 @@ class FrequenciaHabito(str, Enum):
 
 # Schemas para criação
 class HabitoCreate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,  # Aceita tanto alias quanto nome do campo
+        alias_generator=to_camel,  # Gera aliases em camelCase automaticamente
+        extra='ignore'  # Ignora campos extras enviados pelo frontend
+    )
+    
     objetivo_id: str = Field(..., description="ID do objetivo pai")
     titulo: str = Field(..., min_length=1, max_length=255, description="Título do hábito")
     descricao: Optional[str] = Field(None, description="Descrição detalhada do hábito")
@@ -30,6 +41,12 @@ class HabitoCreate(BaseModel):
 
 # Schemas para atualização
 class HabitoUpdate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,  # Aceita tanto alias quanto nome do campo
+        alias_generator=to_camel,  # Gera aliases em camelCase automaticamente
+        extra='ignore'  # Ignora campos extras enviados pelo frontend
+    )
+    
     titulo: Optional[str] = Field(None, min_length=1, max_length=255)
     descricao: Optional[str] = None
     frequencia: Optional[FrequenciaHabito] = None
@@ -41,7 +58,11 @@ class HabitoUpdate(BaseModel):
 
 # Schema de resposta
 class HabitoResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel
+    )
     
     id: str
     usuario_id: str
@@ -61,6 +82,11 @@ class HabitoResponse(BaseModel):
 
 # Schema para marcar como feito
 class MarcarHabitoFeito(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel
+    )
+    
     data_realizacao: Optional[date] = Field(None, description="Data da realização (padrão: hoje)")
     quantidade: int = Field(1, ge=1, description="Quantidade de realizações")
     observacoes: Optional[str] = Field(None, description="Observações sobre a realização")

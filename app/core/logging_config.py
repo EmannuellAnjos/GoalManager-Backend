@@ -13,7 +13,7 @@ class LoggingSettings:
     # Controle de logging
     LOG_REQUEST_BODY = True  # Se deve logar o corpo das requisições
     LOG_RESPONSE_BODY = False  # Se deve logar o corpo das respostas
-    MAX_BODY_SIZE_LOG = 200  # Tamanho máximo do body para log (caracteres)
+    MAX_BODY_SIZE_LOG = 2000  # Tamanho máximo do body para log (caracteres) - aumentado para debug
     
     # Rotas excluídas do logging (para reduzir verbosidade)
     EXCLUDED_PATHS = {

@@ -7,6 +7,11 @@ from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
 
+def to_camel(string: str) -> str:
+    """Converte snake_case para camelCase"""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
 class StatusObjetivo(str, Enum):
     PLANEJADO = "planejado"
     EM_ANDAMENTO = "em_andamento"
@@ -15,6 +20,12 @@ class StatusObjetivo(str, Enum):
 
 # Schemas para criação
 class ObjetivoCreate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        extra='ignore'
+    )
+    
     titulo: str = Field(..., min_length=1, max_length=255, description="Título do objetivo")
     descricao: Optional[str] = Field(None, description="Descrição detalhada do objetivo")
     inicio: Optional[date] = Field(None, description="Data de início")
@@ -25,6 +36,12 @@ class ObjetivoCreate(BaseModel):
 
 # Schemas para atualização
 class ObjetivoUpdate(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        extra='ignore'
+    )
+    
     titulo: Optional[str] = Field(None, min_length=1, max_length=255)
     descricao: Optional[str] = None
     inicio: Optional[date] = None
@@ -35,7 +52,11 @@ class ObjetivoUpdate(BaseModel):
 
 # Schema de resposta
 class ObjetivoResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel
+    )
     
     id: str
     usuario_id: str

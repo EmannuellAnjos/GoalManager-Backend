@@ -4,13 +4,23 @@ Aplicação principal FastAPI - GoalManager Backend
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import logging
+import warnings
 from app.core.config import settings
 from app.core.database import init_db, test_connection
 from app.api import objetivos
 from app.api import habitos, tarefas, auth
 from app.middleware import RequestLoggingMiddleware
+
+# Suprimir avisos do Pydantic sobre aliases (são apenas warnings, não afetam funcionalidade)
+warnings.filterwarnings(
+    'ignore',
+    message='.*alias.*was provided to the `Field\\(\\)` function.*',
+    category=UserWarning,
+    module='pydantic._internal._generate_schema'
+)
 
 # Configurar logging com formato personalizado
 logging.basicConfig(
@@ -37,6 +47,14 @@ async def lifespan(app: FastAPI):
     if not test_connection():
         logger.error("Falha ao conectar com banco de dados")
         raise Exception("Não foi possível conectar com o banco de dados")
+    
+    # Recarregar metadata do banco para evitar cache desatualizado
+    from app.core.database import refresh_metadata
+    try:
+        refresh_metadata()
+        logger.info("Metadata do banco recarregado")
+    except Exception as e:
+        logger.warning(f"Erro ao recarregar metadata (continuando): {e}")
     
     # Inicializar banco de dados (criar tabelas se necessário)
     try:
@@ -75,6 +93,41 @@ app.add_middleware(
 )
 
 # Manipulador de exceções global
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    """Trata erros de validação do Pydantic com detalhes"""
+    errors = exc.errors()
+    logger.error(f"❌ ERRO DE VALIDAÇÃO: {errors}")
+    
+    # Log do corpo da requisição se disponível
+    try:
+        body = await request.body()
+        logger.error(f"📋 Corpo da requisição: {body.decode('utf-8')}")
+    except:
+        pass
+    
+    # Formatar erros de forma legível
+    formatted_errors = []
+    for error in errors:
+        field = " -> ".join(str(loc) for loc in error["loc"])
+        formatted_errors.append({
+            "field": field,
+            "message": error["msg"],
+            "type": error["type"]
+        })
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": 422,
+                "message": "Erro de validação dos dados",
+                "type": "ValidationError",
+                "details": formatted_errors
+            }
+        }
+    )
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
     return JSONResponse(

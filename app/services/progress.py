@@ -52,18 +52,22 @@ def recalcular_progresso_objetivo(db: Session, objetivo_id: str) -> Optional[Dec
         habitos = db.query(Habito).filter(Habito.objetivo_id == objetivo_id).all()
         progresso_habitos = [h.progresso for h in habitos]
         
-        # Buscar progressos de tarefas diretas (sem hábito)
-        tarefas_diretas = db.query(Tarefa).filter(
-            Tarefa.objetivo_id == objetivo_id,
-            Tarefa.habito_id.is_(None)
-        ).all()
+        # Buscar IDs dos hábitos para buscar tarefas
+        habito_ids = [h.id for h in habitos]
         
+        # Buscar progressos de tarefas através dos hábitos
+        # (tarefas agora são ligadas apenas a hábitos, não diretamente a objetivos)
         progresso_tarefas = []
-        for t in tarefas_diretas:
-            if t.status == 'concluida':
-                progresso_tarefas.append(Decimal('100.00'))
-            else:
-                progresso_tarefas.append(t.progresso)
+        if habito_ids:
+            tarefas = db.query(Tarefa).filter(
+                Tarefa.habito_id.in_(habito_ids)
+            ).all()
+            
+            for t in tarefas:
+                if t.status == 'concluida':
+                    progresso_tarefas.append(Decimal('100.00'))
+                else:
+                    progresso_tarefas.append(t.progresso)
         
         # Calcular média dos progressos
         todos_progressos = progresso_habitos + progresso_tarefas

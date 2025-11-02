@@ -11,8 +11,8 @@ class Tarefa(Base):
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     usuario_id = Column(String(36), nullable=False, index=True)
-    objetivo_id = Column(String(36), nullable=True, index=True)
-    habito_id = Column(String(36), nullable=True, index=True)
+    # objetivo_id removido - tarefas agora são ligadas apenas a hábitos
+    habito_id = Column(String(36), nullable=False, index=True)
     titulo = Column(String(255), nullable=False)
     descricao = Column(Text, nullable=True)
     prioridade = Column(String(10), nullable=True, index=True)  # baixa, media, alta

@@ -19,8 +19,13 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
-    echo=settings.debug  # Log SQL queries em modo debug
+    echo=settings.debug,  # Log SQL queries em modo debug
+    echo_pool=False  # Não logar pool de conexões
 )
+
+# Habilitar logging detalhado de SQL para debug
+if settings.debug:
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 # Configurar sessão
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -43,6 +48,26 @@ def get_db():
     finally:
         db.close()
 
+# Função para recarregar metadata do banco (resolve problemas de cache)
+def refresh_metadata():
+    """
+    Recarrega o metadata das tabelas diretamente do banco de dados.
+    Útil quando a estrutura do banco mudou mas o SQLAlchemy ainda tem cache antigo.
+    """
+    try:
+        # Limpar metadata antigo
+        Base.metadata.clear()
+        
+        # Recarregar todos os modelos para registrar novamente
+        from app.models import usuario, objetivo, habito, tarefa, audit_log
+        
+        # Reflect das tabelas existentes no banco
+        Base.metadata.reflect(bind=engine)
+        
+        logger.info("Metadata do banco recarregado com sucesso")
+    except Exception as e:
+        logger.warning(f"Erro ao recarregar metadata (pode ser normal se tabelas não existem): {e}")
+
 # Função para inicializar banco de dados
 def init_db():
     """
@@ -51,6 +76,12 @@ def init_db():
     try:
         # Import todos os modelos aqui para registrá-los
         from app.models import usuario, objetivo, habito, tarefa, audit_log
+        
+        # Recarregar metadata do banco primeiro (resolve cache desatualizado)
+        try:
+            Base.metadata.reflect(bind=engine)
+        except:
+            pass  # Se não conseguir refletir, continua normalmente
         
         # Criar todas as tabelas
         Base.metadata.create_all(bind=engine)

@@ -245,9 +245,16 @@ async def deletar_objetivo(
             detail="Objetivo não encontrado"
         )
     
-    # Remover hábitos e tarefas vinculados
+    # Buscar hábitos vinculados ao objetivo
+    habitos = db.query(Habito).filter(Habito.objetivo_id == objetivo_id).all()
+    habito_ids = [h.id for h in habitos]
+    
+    # Remover tarefas vinculadas aos hábitos (tarefas agora são ligadas apenas a hábitos)
+    if habito_ids:
+        db.query(Tarefa).filter(Tarefa.habito_id.in_(habito_ids)).delete()
+    
+    # Remover hábitos vinculados
     db.query(Habito).filter(Habito.objetivo_id == objetivo_id).delete()
-    db.query(Tarefa).filter(Tarefa.objetivo_id == objetivo_id).delete()
     
     # Remover objetivo
     db.delete(objetivo)
@@ -275,10 +282,17 @@ async def deletar_objetivos_lote(
             detail="Um ou mais objetivos não foram encontrados"
         )
     
-    # Remover hábitos e tarefas vinculados
+    # Buscar hábitos vinculados aos objetivos
+    habitos = db.query(Habito).filter(Habito.objetivo_id.in_(ids)).all()
+    habito_ids = [h.id for h in habitos]
+    
+    # Remover tarefas vinculadas aos hábitos (tarefas agora são ligadas apenas a hábitos)
+    if habito_ids:
+        db.query(Tarefa).filter(Tarefa.habito_id.in_(habito_ids)).delete()
+    
+    # Remover hábitos vinculados
     for objetivo_id in ids:
         db.query(Habito).filter(Habito.objetivo_id == objetivo_id).delete()
-        db.query(Tarefa).filter(Tarefa.objetivo_id == objetivo_id).delete()
     
     # Remover objetivos
     deleted_count = db.query(Objetivo).filter(

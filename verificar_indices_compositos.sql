@@ -1,0 +1,34 @@
+-- Verificar indices compostos que podem incluir objetivo_id
+-- Execute este SQL no MySQL
+
+-- Ver TODOS os indices da tabela tarefas
+SHOW CREATE TABLE tarefas\G
+
+-- OU de forma mais detalhada:
+SELECT 
+    INDEX_NAME,
+    GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) as columns,
+    NON_UNIQUE,
+    INDEX_TYPE
+FROM INFORMATION_SCHEMA.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE()
+AND TABLE_NAME = 'tarefas'
+GROUP BY INDEX_NAME, NON_UNIQUE, INDEX_TYPE
+ORDER BY INDEX_NAME;
+
+-- Ver se algum indice menciona objetivo_id na definicao
+SELECT 
+    INDEX_NAME,
+    COLUMN_NAME,
+    SEQ_IN_INDEX
+FROM INFORMATION_SCHEMA.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE()
+AND TABLE_NAME = 'tarefas'
+AND INDEX_NAME IN (
+    SELECT DISTINCT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'tarefas'
+    AND INDEX_DEFINITION LIKE '%objetivo_id%'
+);
+

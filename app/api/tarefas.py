@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func, text
 from typing import List, Optional
 from datetime import date, datetime
+import logging
 from app.core.database import get_db
 from app.models import Tarefa
 from app.schemas import (
@@ -16,6 +17,8 @@ from app.schemas import (
 from app.services.auth import get_current_user
 from app.services.progress import recalcular_progresso_habito
 from app.utils.serialization import serialize_model, serialize_models
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tarefas", tags=["tarefas"])
 
@@ -157,22 +160,126 @@ async def atualizar_tarefa(
             detail="Tarefa não encontrada"
         )
     
-    # Verificar se status mudou para 'feito' para atualizar data_conclusao
+    # Obter dados para atualizar
     update_data = tarefa_data.model_dump(exclude_unset=True)
     
-    if 'status_kanban' in update_data and update_data['status_kanban'] == 'feito':
-        if tarefa.status_kanban != 'feito':  # Mudança para feito
-            update_data['data_conclusao'] = datetime.utcnow()
-    elif 'status_kanban' in update_data and update_data['status_kanban'] != 'feito':
-        if tarefa.status_kanban == 'feito':  # Mudança de feito para outro status
-            update_data['data_conclusao'] = None
+    # Lista de campos válidos no modelo (evitar tentar atualizar campos que não existem)
+    valid_fields = set(tarefa.__table__.columns.keys())
     
-    # Atualizar campos fornecidos
-    for field, value in update_data.items():
-        setattr(tarefa, field, value)
+    # Filtrar apenas campos que existem no modelo
+    filtered_data = {k: v for k, v in update_data.items() if k in valid_fields}
     
-    db.commit()
-    db.refresh(tarefa)
+    # Log para debug se houver campos inválidos
+    invalid_fields = set(update_data.keys()) - valid_fields
+    if invalid_fields:
+        logger.warning(f"Campos ignorados (não existem no modelo): {invalid_fields}")
+    
+    # Se não há campos válidos para atualizar, retornar sem fazer nada
+    if not filtered_data:
+        db.refresh(tarefa)
+        return DataResponse(data=serialize_model(tarefa))
+    
+    # Fazer UPDATE usando SQL direto para evitar problemas com metadata/cache
+    try:
+        # Construir SET clause dinamicamente
+        set_clauses = []
+        params = {}
+        
+        for field, value in filtered_data.items():
+            param_name = f"val_{field}"
+            set_clauses.append(f"{field} = :{param_name}")
+            params[param_name] = value
+        
+        # Adicionar updated_at
+        set_clauses.append("updated_at = NOW()")
+        
+        set_clause = ", ".join(set_clauses)
+        
+        # Executar UPDATE via SQL direto
+        # Usar SQL direto sem parâmetros nomeados para evitar qualquer problema
+        query_sql = f"""
+            UPDATE tarefas 
+            SET {set_clause}
+            WHERE id = :tarefa_id 
+            AND usuario_id = :usuario_id
+        """
+        
+        query_text = text(query_sql)
+        
+        params['tarefa_id'] = tarefa_id
+        params['usuario_id'] = current_user["sub"]
+        
+        # Log SQL para debug
+        logger.debug(f"Executando UPDATE: {query_sql[:200]}...")
+        logger.debug(f"Parâmetros: {params}")
+        
+        try:
+            result = db.execute(query_text, params)
+            
+            if result.rowcount == 0:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Tarefa não encontrada ou sem permissão"
+                )
+            
+            db.commit()
+        except Exception as sql_error:
+            db.rollback()
+            logger.error(f"Erro SQL ao atualizar tarefa: {sql_error}")
+            logger.error(f"SQL executado: {query_sql}")
+            logger.error(f"Parâmetros: {params}")
+            # Re-lançar o erro original para ver exatamente o que está acontecendo
+            raise
+        
+        # Buscar tarefa atualizada usando SQL direto também (evita qualquer problema com ORM)
+        select_query = text("""
+            SELECT id, usuario_id, habito_id, titulo, descricao, prioridade, status,
+                   estimativa_horas, horas_gastas, prazo, progresso, posicao, 
+                   tags, anexos, created_at, updated_at
+            FROM tarefas
+            WHERE id = :tarefa_id AND usuario_id = :usuario_id
+        """)
+        
+        result_row = db.execute(select_query, {
+            'tarefa_id': tarefa_id,
+            'usuario_id': current_user["sub"]
+        }).fetchone()
+        
+        if not result_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tarefa não encontrada após atualização"
+            )
+        
+        # Criar objeto Tarefa a partir do resultado SQL (sem usar ORM query)
+        # Isso evita qualquer problema com metadata/cache
+        tarefa = Tarefa(
+            id=result_row[0],
+            usuario_id=result_row[1],
+            habito_id=result_row[2],
+            titulo=result_row[3],
+            descricao=result_row[4],
+            prioridade=result_row[5],
+            status=result_row[6],
+            estimativa_horas=result_row[7],
+            horas_gastas=result_row[8],
+            prazo=result_row[9],
+            progresso=result_row[10],
+            posicao=result_row[11],
+            tags=result_row[12],
+            anexos=result_row[13],
+            created_at=result_row[14],
+            updated_at=result_row[15]
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Erro ao atualizar tarefa: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar tarefa: {str(e)}"
+        )
     
     # Recalcular progresso do hábito pai se necessário
     if tarefa.habito_id:

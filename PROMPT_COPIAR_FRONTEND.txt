@@ -1,0 +1,120 @@
+==========================================
+PROMPT PARA COPIAR E USAR NO FRONTEND
+==========================================
+
+Preciso ajustar o frontend para refletir mudanças no backend onde TAREFAS agora são ligadas APENAS a HÁBITOS (não mais a objetivos).
+
+ALTERAÇÕES NECESSÁRIAS:
+
+1. TIPOS TYPESCRIPT:
+   - Remover "objetivoId?: string" da interface Tarefa
+   - Alterar "habitoId?: string" para "habitoId: string" (obrigatório) na interface Tarefa
+   - Remover "objetivoId?: string" da interface TarefaCreate
+   - Alterar "habitoId?: string" para "habitoId: string" (obrigatório) na interface TarefaCreate
+
+2. FORMULÁRIO DE CRIAR/EDITAR TAREFA:
+   - Remover completamente o campo/select de "Objetivo"
+   - Tornar o campo "Hábito" OBRIGATÓRIO com:
+     * isRequired no FormControl
+     * Asterisco (*) no label
+     * Validação que impede submit sem habitoId
+   - Idealmente, passar habitoId como prop (tarefa criada a partir de um hábito específico)
+
+3. VALIDAÇÃO:
+   - Adicionar validação obrigatória para habitoId:
+     if (!data.habitoId) {
+       erros.push('Hábito é obrigatório');
+     }
+
+4. LISTAGEM DE TAREFAS:
+   - Remover badges/chips que mostram objetivo
+   - Remover filtros por objetivo
+   - Manter apenas filtro por hábito
+
+5. CHAMADAS À API:
+   - Garantir que todas chamadas POST/PUT incluem habitoId
+   - Tratar erro 422 se habitoId estiver faltando
+
+6. ESTADO INICIAL:
+   - Se criar tarefa a partir de um hábito, passar habitoId como prop
+   - Exemplo: <NovaTarefaModal habitoId={habito.id} />
+
+EXEMPLO DE CÓDIGO ATUALIZADO:
+
+// Tipo atualizado
+interface TarefaCreate {
+  habitoId: string;  // ✅ OBRIGATÓRIO (era opcional)
+  titulo: string;
+  descricao?: string;
+  prioridade?: 'baixa' | 'media' | 'alta';
+  status?: 'backlog' | 'a_fazer' | 'fazendo' | 'bloqueada' | 'concluida';
+  estimativaHoras?: number;
+  prazo?: string;
+}
+
+// Formulário atualizado
+<FormControl isRequired>
+  <FormLabel>Hábito *</FormLabel>
+  <Select
+    name="habitoId"
+    value={formData.habitoId}
+    onChange={handleChange}
+    isRequired
+  >
+    {habitos.map(hab => (
+      <option key={hab.id} value={hab.id}>{hab.titulo}</option>
+    ))}
+  </Select>
+</FormControl>
+
+// Validação
+if (!formData.habitoId) {
+  toast({
+    title: 'Erro',
+    description: 'Selecione um hábito para a tarefa',
+    status: 'error',
+  });
+  return;
+}
+
+// Chamada API
+const response = await fetch('/api/v1/tarefas', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    habitoId: formData.habitoId,  // ✅ Obrigatório
+    titulo: formData.titulo,
+    // ... outros campos
+  }),
+});
+
+CHECKLIST:
+☐ Tipos TypeScript atualizados (habitoId obrigatório, objetivoId removido)
+☐ Campo Objetivo removido do formulário
+☐ Campo Hábito tornado obrigatório (isRequired)
+☐ Validação de habitoId adicionada
+☐ Badges/referências a objetivo removidas
+☐ Filtros por objetivo removidos
+☐ Testado criação de tarefa (deve exigir hábito)
+☐ Testado edição de tarefa
+☐ Testado listagem por hábito
+
+FLUXO RECOMENDADO:
+1. Usuário clica "Nova Tarefa" no card de um HÁBITO
+2. Modal abre com habitoId já definido (passado como prop)
+3. Usuário preenche título, descrição, etc.
+4. Submit envia com habitoId obrigatório
+5. Tarefa criada vinculada ao hábito
+
+OBSERVAÇÕES:
+- Backend retorna erro 422 se habitoId não for fornecido
+- Campo objetivoId não existe mais na API
+- Todas as tarefas DEVEM ter um habitoId
+
+==========================================
+
+Para documentação completa, veja: PROMPT_FRONTEND_TAREFAS.md
+
